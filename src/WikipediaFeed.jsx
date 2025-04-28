@@ -28,7 +28,7 @@ const ArticleModal = ({ article, onClose }) => {
 
     fetch(PARSE_URL)
       .then(r => r.json())
-      .then(d => setHtml(d.parse?.text || 'Статья не найдена.'))   // ← без обрезки
+      .then(d => setHtml(d.parse?.text || 'Статья не найдена.'))
       .catch(() => setHtml('Не удалось загрузить статью.'));
   }, [article]);
 
@@ -60,7 +60,7 @@ const ArticleModal = ({ article, onClose }) => {
 
         <article
           ref={contentRef}
-          className="prose max-w-none"
+          className="prose max-w-none wiki-content"  /* ← добавили класс */
           dangerouslySetInnerHTML={{ __html: html }}
         />
 
