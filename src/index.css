@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ---- FIX: контент не «уезжает» за экран ---- */
+.wiki-content {
+  overflow-wrap: anywhere;   /* переносим длинные слова/URL */
+  word-break: break-word;
+}
+.wiki-content img,
+.wiki-content video {
+  max-width: 100%;
+  height: auto;
+}
+.wiki-content table {
+  width: 100% !important;    /* таблица не шире экрана */
+  display: block;
+  overflow-x: auto;          /* если нужна, скролл внутри таблицы */
+}
