@@ -3,54 +3,66 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Heart, X, ExternalLink } from 'lucide-react';
 
-// Количество новых статей, подгружаемых за один «скролл»
-const PAGE_BATCH = 10;
-
-// Текущий язык Wikipedia
-const WIKI_LANG = 'ru';
+/* ---------- НАСТРОЙКИ ---------- */
+const PAGE_BATCH = 10;            // статей за «скролл»
+const WIKI_LANG = 'ru';           // язык Википедии
 const API_URL = `https://${WIKI_LANG}.wikipedia.org/api/rest_v1/page/random/summary`;
-const PAGE_URL = (title) =>
+const PAGE_URL = title =>
   `https://${WIKI_LANG}.wikipedia.org/wiki/${encodeURIComponent(title)}`;
-const FULL_HTML_URL = (title) =>
-  `https://${WIKI_LANG}.wikipedia.org/api/rest_v1/page/mobile-html/${encodeURIComponent(
-    title,
-  )}`;
 
+/* ---------- МОДАЛКА: ПОЛНАЯ СТАТЬЯ ---------- */
 const ArticleModal = ({ article, onClose }) => {
   const [html, setHtml] = useState(null);
+  const contentRef = useRef(null);
 
+  /* 1. Загружаем всю статью (HTML) */
   useEffect(() => {
     if (!article) return;
-    setHtml(null);
-    fetch(FULL_HTML_URL(article.title))
-      .then((r) => r.text())
-      .then((text) => setHtml(text))
+
+    setHtml('Загрузка…');
+
+    const PARSE_URL =
+      `https://${WIKI_LANG}.wikipedia.org/w/api.php` +
+      `?action=parse&format=json&prop=text&formatversion=2&origin=*` +
+      `&page=${encodeURIComponent(article.title)}`;
+
+    fetch(PARSE_URL)
+      .then(r => r.json())
+      .then(d => setHtml(d.parse?.text || 'Статья не найдена.'))   // ← без обрезки
       .catch(() => setHtml('Не удалось загрузить статью.'));
   }, [article]);
+
+  /* 2. Делаем «Краткие факты» раскрывающимися */
+  useEffect(() => {
+    if (!contentRef.current) return;
+    contentRef.current
+      .querySelectorAll('button[aria-expanded]')
+      .forEach(btn => {
+        btn.onclick = () => {
+          const expanded = btn.getAttribute('aria-expanded') === 'true';
+          btn.setAttribute('aria-expanded', !expanded);
+          const next = btn.nextElementSibling;
+          if (next) next.style.display = expanded ? 'none' : '';
+        };
+      });
+  }, [html]);
 
   if (!article) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm">
-      <button
-        className="self-end p-4 text-white"
-        onClick={onClose}
-        aria-label="Закрыть"
-      >
+      <button className="self-end p-4 text-white" onClick={onClose} aria-label="Закрыть">
         <X size={28} />
       </button>
 
       <div className="flex-1 overflow-y-auto bg-white rounded-t-2xl p-6 space-y-4">
         <h1 className="text-2xl font-bold leading-tight">{article.title}</h1>
 
-        {html ? (
-          <article
-            className="prose max-w-none"
-            dangerouslySetInnerHTML={{ __html: html }}
-          />
-        ) : (
-          <p>Загрузка…</p>
-        )}
+        <article
+          ref={contentRef}
+          className="prose max-w-none"
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
 
         <Button asChild className="gap-2 mt-6" variant="outline" size="lg">
           <a href={PAGE_URL(article.title)} target="_blank" rel="noopener noreferrer">
@@ -62,6 +74,7 @@ const ArticleModal = ({ article, onClose }) => {
   );
 };
 
+/* ---------- КАРТОЧКА В ЛЕНТЕ ---------- */
 const WikiCard = ({ article, onRead }) => {
   const [liked, setLiked] = useState(false);
 
@@ -101,48 +114,43 @@ const WikiCard = ({ article, onRead }) => {
   );
 };
 
+/* ---------- ЛЕНТА СТАТЕЙ ---------- */
 const WikipediaFeed = () => {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [openArticle, setOpenArticle] = useState(null);
-
   const loaderRef = useRef(null);
 
+  /* загрузка новой порции */
   const fetchArticles = useCallback(async () => {
     setLoading(true);
     try {
-      const promises = Array.from({ length: PAGE_BATCH }).map(() =>
-        fetch(API_URL).then((r) => r.json()),
+      const batch = Array.from({ length: PAGE_BATCH }).map(() =>
+        fetch(API_URL).then(r => r.json()),
       );
-      const results = await Promise.all(promises);
-      setArticles((prev) => [...prev, ...results]);
+      const results = await Promise.all(batch);
+      setArticles(prev => [...prev, ...results]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    fetchArticles();
-  }, [fetchArticles]);
+  useEffect(() => { fetchArticles(); }, [fetchArticles]);
 
+  /* бесконечный скролл */
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && !loading) {
-          fetchArticles();
-        }
-      },
+    const obs = new IntersectionObserver(
+      e => e[0].isIntersecting && !loading && fetchArticles(),
       { threshold: 1 },
     );
-
-    if (loaderRef.current) observer.observe(loaderRef.current);
-    return () => observer.disconnect();
+    if (loaderRef.current) obs.observe(loaderRef.current);
+    return () => obs.disconnect();
   }, [fetchArticles, loading]);
 
   return (
     <div className="flex flex-col items-center py-8">
-      {articles.map((a, idx) => (
-        <WikiCard key={`${a.pageid}-${idx}`} article={a} onRead={setOpenArticle} />
+      {articles.map((a, i) => (
+        <WikiCard key={`${a.pageid}-${i}`} article={a} onRead={setOpenArticle} />
       ))}
 
       <span ref={loaderRef} className="h-8" />
